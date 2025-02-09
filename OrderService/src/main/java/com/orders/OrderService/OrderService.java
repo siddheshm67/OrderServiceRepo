@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.LocalDate;
@@ -24,12 +23,26 @@ public class OrderService {
     int capital = 10000;
 
     public void tradeStock(int token, String name, String enctoken) throws Exception {
-        StockData stockData = historicalDataFetcher.fetchStockData(LocalDate.of(2025,02,03), token, enctoken);
-        double close = stockData.getClose();
+        //Original
+        /*long start1 = System.nanoTime();
+        StockData stockData1 = historicalDataFetcher.fetchStockData(LocalDate.of(2025,02,03), token, enctoken);
+        double close1 = stockData1.getClose();
+        long end1 = System.nanoTime();
+        System.out.println(close1+" method1:" + (end1-start1));*/
+
+        //optimized
+        long start3 = System.nanoTime();
+        StockData stockDataOptimized = historicalDataFetcher.fetchStockDataOptimized(LocalDate.of(2025,02,03), token, enctoken);
+        long end3 = System.nanoTime();
+        System.out.println(" method3:" + (end3-start3));
+
+
+        double close = stockDataOptimized.getClose();
         int responseCode = 0;
         if (close<capital){
             double quantity = capital / close;
-            responseCode = httpAgent.placeOrder(enctoken, String.valueOf((int)quantity), name);
+          //  responseCode = httpAgent.placeOrder(enctoken, String.valueOf((int)quantity), name);
+            responseCode = httpAgent.placeOrderOptimized(enctoken, String.valueOf((int)quantity), name);
         }else {
             System.out.println("Stock price is grater then Capital...!!!");
             ResponseData responseData = new ResponseData();

@@ -2,17 +2,18 @@ package com.orders.OrderService;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -92,6 +93,92 @@ public class HistoricalDataFetcher {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return stockData;
+    }
+
+    public StockData fetchStockDataUsingOkhttp(LocalDate date, int stockToken, String encToken) {
+        StockData stockData = new StockData();
+        String timeframe = "day";
+
+        String url = String.format("https://kite.zerodha.com/oms/instruments/historical/%d/%s", stockToken, timeframe);
+
+        // Build query parameters
+        HttpUrl.Builder urlBuilder = HttpUrl.parse(url).newBuilder();
+        urlBuilder.addQueryParameter("oi", "1");
+        urlBuilder.addQueryParameter("from", date.toString());
+        urlBuilder.addQueryParameter("to", date.toString());
+
+        String finalUrl = urlBuilder.build().toString();
+
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder()
+                .url(finalUrl)
+                .addHeader("Authorization", "enctoken " + encToken)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful() && response.body() != null) {
+                String responseString = response.body().string();
+                ObjectMapper objectMapper = new ObjectMapper();
+                JsonNode rootNode = objectMapper.readTree(responseString);
+                JsonNode candlesNode = rootNode.path("data").path("candles");
+
+                if (!candlesNode.isEmpty()) {
+                    for (JsonNode candle : candlesNode) {
+                        stockData.setOpen(candle.get(1).asDouble());
+                        stockData.setHigh(candle.get(2).asDouble());
+                        stockData.setLow(candle.get(3).asDouble());
+                        stockData.setClose(candle.get(4).asDouble());
+                    }
+                }
+            } else {
+                System.out.println("GET request failed. Response Code: " + response.code());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return stockData;
+    }
+
+    public StockData fetchStockDataOptimized(LocalDate date, int stockToken, String encToken) {
+        StockData stockData = new StockData();
+        String url = String.format("https://kite.zerodha.com/oms/instruments/historical/%d/day", stockToken);
+
+        HttpUrl finalUrl = HttpUrl.parse(url).newBuilder()
+                .addQueryParameter("oi", "1")
+                .addQueryParameter("from", date.toString())
+                .addQueryParameter("to", date.toString())
+                .build();
+
+        OkHttpClient client = new OkHttpClient.Builder()
+                .retryOnConnectionFailure(true)
+                .build();
+
+        Request request = new Request.Builder()
+                .url(finalUrl)
+                .addHeader("Authorization", "enctoken " + encToken)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful() && response.body() != null) {
+                JsonNode candlesNode = new ObjectMapper().readTree(response.body().string())
+                        .path("data").path("candles");
+
+                if (!candlesNode.isEmpty()) {
+                    JsonNode lastCandle = candlesNode.get(candlesNode.size() - 1);
+                    stockData.setOpen(lastCandle.get(1).asDouble());
+                    stockData.setHigh(lastCandle.get(2).asDouble());
+                    stockData.setLow(lastCandle.get(3).asDouble());
+                    stockData.setClose(lastCandle.get(4).asDouble());
+                }
+            } else {
+                System.err.println("GET request failed. Response Code: " + response.code());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         return stockData;
     }
 
